@@ -24,7 +24,6 @@
     .card {
       padding: 22px; margin: 14px 0; border-radius: 18px;
       background: #ffffff18; border: 1px solid #ffffff25;
-      backdrop-filter: blur(8px);
     }
     .now { display: flex; align-items: center; gap: 18px; }
     .icon { font-size: 56px; }
@@ -59,42 +58,46 @@
 
     function description(code) {
       if (code === 0) return ["Sereno", "☀️"];
-      if (code === 1) return ["Poco nuvoloso", "🌤️"];
-      if (code === 2) return ["Parzialmente nuvoloso", "⛅"];
-      if (code === 3) return ["Nuvoloso", "☁️"];
-      if ([45, 48].includes(code)) return ["Nebbia", "🌫️"];
-      if ([51, 53, 55, 56, 57].includes(code)) return ["Pioviggine", "🌦️"];
-      if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return ["Pioggia", "🌧️"];
-      if ([71, 73, 75, 77, 85, 86].includes(code)) return ["Neve", "🌨️"];
-      if ([95, 96, 99].includes(code)) return ["Temporale", "⛈️"];
-      return ["Variabile", "🌥️"];
+      if (code <= 3) return ["Nuvoloso", "⛅"];
+      if (code <= 48) return ["Nebbia", "🌫️"];
+      if (code <= 67) return ["Pioggia", "🌧️"];
+      if (code <= 77) return ["Neve", "❄️"];
+      if (code <= 82) return ["Rovesci", "🌦️"];
+      if (code <= 86) return ["Neve", "🌨️"];
+      if (code >= 95) return ["Temporale", "⛈️"];
+      return ["Variabile", "🌤️"];
     }
 
     function dayName(date) {
       return new Date(date + "T12:00:00").toLocaleDateString("it-IT", {
-        weekday: "short", day: "numeric"
+        weekday: "short",
+        day: "numeric"
       });
     }
 
     async function loadWeather(city) {
-      message.textContent = "Cerco la città…";
+      message.textContent = "Caricamento…";
       weather.innerHTML = "";
 
       try {
         const geoUrl = new URL("https://geocoding-api.open-meteo.com/v1/search");
         geoUrl.search = new URLSearchParams({
-          name: city, count: "1", language: "it", format: "json"
+          name: city,
+          count: "1",
+          language: "it",
+          format: "json"
         });
+
         const geoResponse = await fetch(geoUrl);
         if (!geoResponse.ok) throw new Error();
         const geoData = await geoResponse.json();
         const place = geoData.results?.[0];
+
         if (!place) {
-          message.textContent = "Non trovo questa città. Prova con un altro nome.";
+          message.textContent = "Città non trovata. Prova a scriverne un’altra.";
           return;
         }
 
-        message.textContent = "Carico le previsioni…";
         const forecastUrl = new URL("https://api.open-meteo.com/v1/forecast");
         forecastUrl.search = new URLSearchParams({
           latitude: place.latitude,
@@ -104,6 +107,7 @@
           timezone: "auto",
           forecast_days: "5"
         });
+
         const response = await fetch(forecastUrl);
         if (!response.ok) throw new Error();
         const data = await response.json();
@@ -138,6 +142,7 @@
               </article>`;
             }).join("")}
           </div>`;
+
         message.textContent = "";
       } catch {
         message.textContent = "Non riesco a caricare i dati. Controlla la connessione e riprova.";
