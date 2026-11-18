@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tempest Meteo</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; padding: 32px 16px;
+      font-family: system-ui, sans-serif; color: #f5f8ff;
+      background: linear-gradient(145deg, #10224a, #176b91);
+    }
+    main { width: min(760px, 100%); margin: auto; }
+    h1 { margin-bottom: 6px; }
+    .muted { color: #c8d7e9; }
+    form { display: flex; gap: 10px; margin: 24px 0; }
+    input, button {
+      border: 0; border-radius: 12px; padding: 13px 16px; font: inherit;
+    }
+    input { flex: 1; min-width: 0; }
+    button { cursor: pointer; color: white; background: #1686b5; font-weight: 700; }
+    button:hover { background: #20a0d1; }
+    .card {
+      padding: 22px; margin: 14px 0; border-radius: 18px;
+      background: #ffffff18; border: 1px solid #ffffff25;
+      backdrop-filter: blur(8px);
+    }
+    .now { display: flex; align-items: center; gap: 18px; }
+    .icon { font-size: 56px; }
+    .temperature { font-size: 48px; font-weight: 750; }
+    .days { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+    .day { text-align: center; padding: 16px 8px; border-radius: 14px; background: #ffffff12; }
+    .day-icon { font-size: 30px; }
+    #message { min-height: 24px; }
+    footer { margin-top: 22px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🌦️ Tempest Meteo</h1>
+    <div class="muted">Il meteo della tua città, a colpo d’occhio.</div>
+
+    <form id="search-form">
+      <input id="city" placeholder="Scrivi una città, es. Roma" required>
+      <button type="submit">Cerca</button>
+    </form>
+
+    <div id="message" role="status"></div>
+    <section id="weather"></section>
+    <footer class="muted">Dati meteo: Open-Meteo</footer>
+  </main>
+
+  <script>
+    const form = document.querySelector("#search-form");
+    const input = document.querySelector("#city");
+    const message = document.querySelector("#message");
+    const weather = document.querySelector("#weather");
+
+    function description(code) {
+      if (code === 0) return ["Sereno", "☀️"];
+      if (code === 1) return ["Poco nuvoloso", "🌤️"];
+      if (code === 2) return ["Parzialmente nuvoloso", "⛅"];
+      if (code === 3) return ["Nuvoloso", "☁️"];
+      if ([45, 48].includes(code)) return ["Nebbia", "🌫️"];
+      if ([51, 53, 55, 56, 57].includes(code)) return ["Pioviggine", "🌦️"];
+      if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return ["Pioggia", "🌧️"];
+      if ([71, 73, 75, 77, 85, 86].includes(code)) return ["Neve", "🌨️"];
+      if ([95, 96, 99].includes(code)) return ["Temporale", "⛈️"];
+      return ["Variabile", "🌥️"];
+    }
+
+    function dayName(date) {
+      return new Date(date + "T12:00:00").toLocaleDateString("it-IT", {
+        weekday: "short", day: "numeric"
+      });
+    }
+
+    async function loadWeather(city) {
+      message.textContent = "Cerco la città…";
+      weather.innerHTML = "";
+
+      try {
+        const geoUrl = new URL("https://geocoding-api.open-meteo.com/v1/search");
+        geoUrl.search = new URLSearchParams({
+          name: city, count: "1", language: "it", format: "json"
+        });
+        const geoResponse = await fetch(geoUrl);
+        if (!geoResponse.ok) throw new Error();
+        const geoData = await geoResponse.json();
+        const place = geoData.results?.[0];
+        if (!place) {
+          message.textContent = "Non trovo questa città. Prova con un altro nome.";
+          return;
+        }
+
+        message.textContent = "Carico le previsioni…";
+        const forecastUrl = new URL("https://api.open-meteo.com/v1/forecast");
+        forecastUrl.search = new URLSearchParams({
+          latitude: place.latitude,
+          longitude: place.longitude,
+          current: "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m",
+          daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+          timezone: "auto",
+          forecast_days: "5"
+        });
+        const response = await fetch(forecastUrl);
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        const current = data.current;
+        const [label, icon] = description(current.weather_code);
+
+        weather.innerHTML = `
+          <article class="card">
+            <h2>${place.name}${place.country ? ", " + place.country : ""}</h2>
+            <div class="now">
+              <div class="icon">${icon}</div>
+              <div>
+                <div class="temperature">${Math.round(current.temperature_2m)}°</div>
+                <div>${label}</div>
+              </div>
+            </div>
+            <p>Percepita ${Math.round(current.apparent_temperature)}° ·
+              Umidità ${current.relative_humidity_2m}% ·
+              Vento ${Math.round(current.wind_speed_10m)} km/h</p>
+          </article>
+          <h2>Prossimi giorni</h2>
+          <div class="days">
+            ${data.daily.time.map((date, i) => {
+              const [text, symbol] = description(data.daily.weather_code[i]);
+              return `<article class="day">
+                <strong>${dayName(date)}</strong>
+                <div class="day-icon">${symbol}</div>
+                <div>${text}</div>
+                <p>${Math.round(data.daily.temperature_2m_max[i])}° /
+                   ${Math.round(data.daily.temperature_2m_min[i])}°</p>
+                <small>Pioggia: ${data.daily.precipitation_probability_max[i] ?? 0}%</small>
+              </article>`;
+            }).join("")}
+          </div>`;
+        message.textContent = "";
+      } catch {
+        message.textContent = "Non riesco a caricare i dati. Controlla la connessione e riprova.";
+      }
+    }
+
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      loadWeather(input.value.trim());
+    });
+
+    loadWeather("Roma");
+  </script>
+</body>
+</html>
